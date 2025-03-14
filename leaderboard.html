@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orbital Defense - Leaderboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: #0f0;
+      padding: 20px;
+      margin: 0;
+    }
+    
+    h1 {
+      color: #0ff;
+      text-align: center;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+      margin-bottom: 20px;
+    }
+    
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+    }
+    
+    .leaderboard {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .leaderboard th,
+    .leaderboard td {
+      padding: 10px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+    }
+    
+    .leaderboard th {
+      background-color: #222;
+      color: #0ff;
+    }
+    
+    .leaderboard tr:nth-child(even) {
+      background-color: #111;
+    }
+    
+    .leaderboard tr:hover {
+      background-color: #333;
+    }
+    
+    .highlight {
+      background-color: rgba(0, 255, 0, 0.2) !important;
+      animation: pulse 2s;
+    }
+    
+    .time-ago {
+      font-size: 0.8em;
+      color: #888;
+    }
+    
+    .status {
+      text-align: center;
+      margin-top: 20px;
+      color: #888;
+      font-style: italic;
+    }
+    
+    @keyframes pulse {
+      0% { background-color: rgba(0, 255, 0, 0.5); }
+      100% { background-color: rgba(0, 255, 0, 0.2); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ORBITAL DEFENSE LEADERBOARD</h1>
+    <table class="leaderboard">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Player</th>
+          <th>Score</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboard-body">
+        <!-- Scores will be inserted here -->
+      </tbody>
+    </table>
+    <div id="status" class="status">Loading leaderboard data...</div>
+  </div>
+
+  <script>
+    // Set up communication channel
+    const leaderboardChannel = new BroadcastChannel('orbital-defense-leaderboard');
+    let currentPlayer = null;
+    
+    // Function to format time ago
+    function timeAgo(timestamp) {
+      const seconds = Math.floor((Date.now() - timestamp) / 1000);
+      
+      if (seconds < 60) {
+        return 'just now';
+      } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+      } else if (seconds < 86400) {
+        const hours = Math.floor(seconds / 3600);
+        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      } else {
+        const days = Math.floor(seconds / 86400);
+        return `${days} day${days > 1 ? 's' : ''} ago`;
+      }
+    }
+    
+    // Load and display scores with improved handling
+    function updateLeaderboard(newScore = null) {
+      const leaderboardBody = document.getElementById('leaderboard-body');
+      const statusElement = document.getElementById('status');
+      
+      console.log('Updating leaderboard', newScore ? `with new score: ${newScore.score} by ${newScore.name}` : '');
+      
+      // Get scores from localStorage
+      let allScores = JSON.parse(localStorage.getItem('orbital-defense-scores') || '[]');
+      console.log(`Found ${allScores.length} total scores in localStorage`);
+      
+      // Filter for "online" players (scores from the last 24 hours)
+      const onlineThreshold = Date.now() - (24 * 60 * 60 * 1000);
+      const activeScores = allScores.filter(score => score.timestamp > onlineThreshold);
+      
+      // Sort by score (highest first)
+      activeScores.sort((a, b) => b.score - a.score);
+      
+      // Clear previous entries
+      leaderboardBody.innerHTML = '';
+      
+      if (activeScores.length === 0) {
+        statusElement.textContent = 'No recent scores found. Play a game to be the first on the leaderboard!';
+        return;
+      }
+      
+      // Update status
+      statusElement.textContent = `Showing top scores from the last 24 hours (${activeScores.length} entries)`;
+      
+      // Display top scores
+      activeScores.forEach((score, index) => {
+        const row = document.createElement('tr');
+        
+        // Highlight new score
+        if (newScore && 
+            newScore.name === score.name && 
+            newScore.score === score.score && 
+            Math.abs(newScore.timestamp - score.timestamp) < 1000) {
+          row.classList.add('highlight');
+        }
+        
+        // Also highlight current player's scores
+        if (currentPlayer && score.name === currentPlayer) {
+          row.style.fontWeight = 'bold';
+        }
+        
+        row.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${score.name}</td>
+          <td>${score.score}</td>
+          <td><span class="time-ago">${timeAgo(score.timestamp)}</span></td>
+        `;
+        
+        leaderboardBody.appendChild(row);
+      });
+    }
+    
+    // Listen for messages with improved handling
+    leaderboardChannel.onmessage = (event) => {
+      console.log('Leaderboard received message:', event.data.type);
+      
+      if (event.data.type === 'new-score') {
+        console.log('New score received:', event.data.data);
+        // Update leaderboard with new score
+        updateLeaderboard(event.data.data);
+      } 
+      else if (event.data.type === 'player-connected') {
+        currentPlayer = event.data.data.name;
+        console.log('Player connected:', currentPlayer);
+        updateLeaderboard(); // Refresh to highlight current player
+      }
+    };
+    
+    // Send a ping to the game window to show we're open
+    leaderboardChannel.postMessage({
+      type: 'leaderboard-ready'
+    });
+    console.log('Leaderboard ready, sent message to game');
+    
+    // Update time displays periodically
+    function updateTimes() {
+      const timeElements = document.querySelectorAll('.time-ago');
+      timeElements.forEach(el => {
+        const scoreRow = el.closest('tr');
+        const scoreIndex = Array.from(scoreRow.parentNode.children).indexOf(scoreRow);
+        const scores = JSON.parse(localStorage.getItem('orbital-defense-scores') || '[]')
+          .filter(score => score.timestamp > Date.now() - (24 * 60 * 60 * 1000))
+          .sort((a, b) => b.score - a.score);
+          
+        if (scores[scoreIndex]) {
+          el.textContent = timeAgo(scores[scoreIndex].timestamp);
+        }
+      });
+    }
+    
+    // Initial load with debug logging
+    console.log('Initial leaderboard load');
+    updateLeaderboard();
+    
+    // Update times every minute
+    setInterval(updateTimes, 60000);
+    
+    // Refresh leaderboard every 30 seconds
+    setInterval(updateLeaderboard, 30000);
+    
+    // Add a force refresh button
+    document.addEventListener('DOMContentLoaded', function() {
+      const container = document.querySelector('.container');
+      const refreshButton = document.createElement('button');
+      refreshButton.textContent = 'Refresh Leaderboard';
+      refreshButton.style.margin = '20px auto';
+      refreshButton.style.display = 'block';
+      refreshButton.style.padding = '8px 16px';
+      refreshButton.style.backgroundColor = '#0066cc';
+      refreshButton.style.color = 'white';
+      refreshButton.style.border = 'none';
+      refreshButton.style.borderRadius = '4px';
+      refreshButton.style.cursor = 'pointer';
+      
+      refreshButton.addEventListener('click', function() {
+        console.log('Manual refresh');
+        updateLeaderboard();
+      });
+      
+      container.appendChild(refreshButton);
+    });
+  </script>
+</body>
+</html>

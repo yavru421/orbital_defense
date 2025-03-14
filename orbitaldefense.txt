@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orbital Defense</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    canvas {
+      border: 1px solid #333;
+      background-color: #000;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border-radius: 5px;
+    }
+    
+    #health-bar {
+      width: 200px;
+      height: 20px;
+      background-color: #333;
+      margin-top: 5px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    #health-fill {
+      height: 100%;
+      width: 100%;
+      background-color: #0f0;
+      transition: width 0.3s;
+    }
+    
+    button {
+      background-color: #444;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      margin: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #555;
+    }
+    
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: red;
+      text-align: center;
+      display: none;
+    }
+    
+    #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: rgba(0, 0, 0, 0.8);
+    }
+    
+    #start-screen h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px #0ff;
+    }
+    
+    #start-screen button {
+      font-size: 24px;
+      padding: 15px 30px;
+      background-color: #0066cc;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+      <div>Score: <span id="score">0</span></div>
+      <div>Health: <span id="health-text">100</span></div>
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <button id="pause-button">Pause</button>
+    </div>
+    
+    <div id="game-over">
+      <div>Game Over!</div>
+      <div>Final Score: <span id="final-score">0</span></div>
+      <button id="restart-button">Play Again</button>
+    </div>
+    
+    <div id="start-screen">
+      <h1>Orbital Defense</h1>
+      <p>Defend your planet from incoming meteors!</p>
+      <p>Use arrow keys to rotate and space to fire</p>
+      <button id="start-button">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+    // Game setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const pauseButton = document.getElementById('pause-button');
+    const restartButton = document.getElementById('restart-button');
+    const startButton = document.getElementById('start-button');
+    const scoreElement = document.getElementById('score');
+    const healthText = document.getElementById('health-text');
+    const healthFill = document.getElementById('health-fill');
+    const gameOverElement = document.getElementById('game-over');
+    const finalScoreElement = document.getElementById('final-score');
+    const startScreen = document.getElementById('start-screen');
+    
+    // Set canvas dimensions
+    function resizeCanvas() {
+      const containerWidth = window.innerWidth;
+      const containerHeight = window.innerHeight;
+      const size = Math.min(containerWidth, containerHeight) * 0.9;
+      
+      canvas.width = size;
+      canvas.height = size;
+    }
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Game state
+    let gameRunning = false;
+    let gamePaused = false;
+    let score = 0;
+    let health = 100;
+    let animationId;
+    let lastTimestamp = 0;
+    let meteorSpawnTimer = 0;
+    let meteorSpawnRate = 1500; // ms
+    let difficulty = 1;
+    let angle = 0;
+    
+    // Game objects
+    const planet = {
+      x: 0,
+      y: 0,
+      radius: 30,
+      draw: function() {
+        // Draw the planet
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#29f';
+        ctx.fill();
+        
+        // Draw atmosphere glow
+        const gradient = ctx.createRadialGradient(
+          this.x, this.y, this.radius, 
+          this.x, this.y, this.radius * 1.2
+        );
+        gradient.addColorStop(0, 'rgba(41, 128, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(41, 128, 255, 0)');
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+    
+    const cannon = {
+      length: 40,
+      width: 10,
+      angle: 0,
+      rotationSpeed: 0.05,
+      draw: function() {
+        ctx.save();
+        ctx.translate(planet.x, planet.y);
+        ctx.rotate(this.angle);
+        
+        // Draw cannon
+        ctx.beginPath();
+        ctx.rect(0, -this.width/2, this.length, this.width);
+        ctx.fillStyle = '#777';
+        ctx.fill();
+        
+        // Draw cannon tip
+        ctx.beginPath();
+        ctx.arc(this.length, 0, this.width/2, 0, Math.PI * 2);
+        ctx.fillStyle = '#999';
+        ctx.fill();
+        
+        ctx.restore();
+      },
+      rotate: function(direction) {
+        this.angle += direction * this.rotationSpeed;
+      },
+      getProjectileStartPosition: function() {
+        return {
+          x: planet.x + Math.cos(this.angle) * (this.length + planet.radius),
+          y: planet.y + Math.sin(this.angle) * (this.length + planet.radius),
+          angle: this.angle
+        };
+      }
+    };
+    
+    const meteors = [];
+    const projectiles = [];
+    const explosions = [];
+    
+    class Meteor {
+      constructor() {
+        const side = Math.floor(Math.random() * 4);
+        const size = Math.random() * 15 + 10;
+        
+        this.radius = size;
+        this.speed = (Math.random() * 1 + 1) * difficulty;
+        this.damage = Math.floor(size);
+        this.points = Math.floor(size);
+        this.color = `hsl(${Math.random() * 30}, 100%, 50%)`;
+        
+        // Position meteors to come from all sides
+        switch(side) {
+          case 0: // top
+            this.x = Math.random() * canvas.width;
+            this.y = -this.radius;
+            this.vx = (Math.random() * 2 - 1) * this.speed;
+            this.vy = Math.random() * this.speed;
+            break;
+          case 1: // right
+            this.x = canvas.width + this.radius;
+            this.y = Math.random() * canvas.height;
+            this.vx = -Math.random() * this.speed;
+            this.vy = (Math.random() * 2 - 1) * this.speed;
+            break;
+          case 2: // bottom
+            this.x = Math.random() * canvas.width;
+            this.y = canvas.height + this.radius;
+            this.vx = (Math.random() * 2 - 1) * this.speed;
+            this.vy = -Math.random() * this.speed;
+            break;
+          case 3: // left
+            this.x = -this.radius;
+            this.y = Math.random() * canvas.height;
+            this.vx = Math.random() * this.speed;
+            this.vy = (Math.random() * 2 - 1) * this.speed;
+            break;
+        }
+        
+        // Adjust velocity to aim generally toward the planet
+        const dx = planet.x - this.x;
+        const dy = planet.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        this.vx += (dx / dist) * this.speed * 0.5;
+        this.vy += (dy / dist) * this.speed * 0.5;
+        
+        // Random rotation
+        this.rotation = 0;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+        
+        // Create meteor shape
+        this.vertices = [];
+        const numVertices = Math.floor(Math.random() * 5) + 8;
+        for (let i = 0; i < numVertices; i++) {
+          const angle = (i / numVertices) * Math.PI * 2;
+          const r = this.radius * (0.8 + Math.random() * 0.4);
+          this.vertices.push({
+            x: Math.cos(angle) * r,
+            y: Math.sin(angle) * r
+          });
+        }
+      }
+      
+      update(deltaTime) {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.rotation += this.rotationSpeed;
+        
+        // Check for collision with planet
+        const dx = this.x - planet.x;
+        const dy = this.y - planet.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < this.radius + planet.radius) {
+          return 'hit_planet';
+        }
+        
+        // Check if meteor is off screen by a margin
+        const margin = this.radius * 2;
+        if (this.x < -margin || this.x > canvas.width + margin || 
+            this.y < -margin || this.y > canvas.height + margin) {
+          
+          // Only remove if it's moving away from the center
+          const dx = this.x - canvas.width/2;
+          const dy = this.y - canvas.height/2;
+          if ((dx > 0 && this.vx > 0) || (dx < 0 && this.vx < 0) ||
+              (dy > 0 && this.vy > 0) || (dy < 0 && this.vy < 0)) {
+            return 'remove';
+          }
+        }
+        
+        return null;
+      }
+      
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        
+        // Draw meteor shape
+        ctx.beginPath();
+        ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
+        for (let i = 1; i < this.vertices.length; i++) {
+          ctx.lineTo(this.vertices[i].x, this.vertices[i].y);
+        }
+        ctx.closePath();
+        
+        // Fill with gradient
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+        gradient.addColorStop(0, this.color);
+        gradient.addColorStop(1, '#500');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Add some texture/craters
+        for (let i = 0; i < 3; i++) {
+          const craterX = (Math.random() - 0.5) * this.radius * 0.8;
+          const craterY = (Math.random() - 0.5) * this.radius * 0.8;
+          const craterSize = Math.random() * this.radius * 0.3 + this.radius * 0.1;
+          
+          ctx.beginPath();
+          ctx.arc(craterX, craterY, craterSize, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      }
+    }
+    
+    class Projectile {
+      constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.radius = 5;
+        this.speed = 8;
+        this.vx = Math.cos(angle) * this.speed;
+        this.vy = Math.sin(angle) * this.speed;
+        this.life = 100; // How long the projectile lives
+      }
+      
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        
+        // Check if projectile is off screen or depleted
+        if (this.x < -this.radius || this.x > canvas.width + this.radius ||
+            this.y < -this.radius || this.y > canvas.height + this.radius ||
+            this.life <= 0) {
+          return 'remove';
+        }
+        
+        // Check for collision with meteors
+        for (let i = 0; i < meteors.length; i++) {
+          const meteor = meteors[i];
+          const dx = this.x - meteor.x;
+          const dy = this.y - meteor.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < this.radius + meteor.radius) {
+            // Create explosion
+            createExplosion(meteor.x, meteor.y, meteor.radius);
+            
+            // Add score
+            score += meteor.points;
+            scoreElement.textContent = score;
+            
+            // Remove the meteor
+            meteors.splice(i, 1);
+            return 'hit';
+          }
+        }
+        
+        return null;
+      }
+      
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        
+        // Create gradient
+        const gradient = ctx.createRadialGradient(
+          this.x, this.y, 0,
+          this.x, this.y, this.radius
+        );
+        gradient.addColorStop(0, '#fff');
+        gradient.addColorStop(1, '#0f0');
+        
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Draw trail
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x - this.vx * 3, this.y - this.vy * 3);
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+        ctx.lineWidth = this.radius * 1.5;
+        ctx.stroke();
+      }
+    }
+    
+    class Explosion {
+      constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.particles = [];
+        this.lifetime = 30;
+        
+        // Create particles
+        const numParticles = Math.floor(size * 2);
+        for (let i = 0; i < numParticles; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 3 + 1;
+          
+          this.particles.push({
+            x: 0,
+            y: 0,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: Math.random() * size * 0.3 + size * 0.1,
+            color: `hsl(${Math.random() * 30 + 15}, 100%, 50%)`
+          });
+        }
+      }
+      
+      update() {
+        this.lifetime--;
+        
+        for (const particle of this.particles) {
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          particle.size *= 0.95;
+        }
+        
+        return this.lifetime <= 0 ? 'remove' : null;
+      }
+      
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        for (const particle of this.particles) {
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+          ctx.fillStyle = particle.color;
+          ctx.globalAlpha = this.lifetime / 30;
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      }
+    }
+    
+    // Game control functions
+    function createExplosion(x, y, size) {
+      explosions.push(new Explosion(x, y, size));
+    }
+    
+    function spawnMeteor() {
+      meteors.push(new Meteor());
+    }
+    
+    function fireProjectile() {
+      const pos = cannon.getProjectileStartPosition();
+      projectiles.push(new Projectile(pos.x, pos.y, pos.angle));
+    }
+    
+    function updateHealth(change) {
+      health = Math.max(0, health + change);
+      healthText.textContent = health;
+      healthFill.style.width = `${health}%`;
+      
+      // Update health bar color
+      if (health > 60) {
+        healthFill.style.backgroundColor = '#0f0';
+      } else if (health > 30) {
+        healthFill.style.backgroundColor = '#ff0';
+      } else {
+        healthFill.style.backgroundColor = '#f00';
+      }
+      
+      if (health <= 0) {
+        gameOver();
+      }
+    }
+    
+    function gameOver() {
+      gameRunning = false;
+      gameOverElement.style.display = 'block';
+      finalScoreElement.textContent = score;
+      cancelAnimationFrame(animationId);
+    }
+    
+    function resetGame() {
+      // Reset game state
+      score = 0;
+      health = 100;
+      difficulty = 1;
+      meteorSpawnRate = 1500;
+      
+      // Update UI
+      scoreElement.textContent = score;
+      updateHealth(0);
+      
+      // Clear game objects
+      meteors.length = 0;
+      projectiles.length = 0;
+      explosions.length = 0;
+      
+      // Reset cannon
+      cannon.angle = 0;
+      
+      // Hide game over screen
+      gameOverElement.style.display = 'none';
+      
+      // Start the game
+      gameRunning = true;
+      gamePaused = false;
+      pauseButton.textContent = 'Pause';
+      
+      // Start game loop
+      lastTimestamp = performance.now();
+      gameLoop();
+    }
+    
+    function togglePause() {
+      gamePaused = !gamePaused;
+      pauseButton.textContent = gamePaused ? 'Resume' : 'Pause';
+      
+      if (!gamePaused) {
+        lastTimestamp = performance.now();
+        gameLoop();
+      }
+    }
+    
+    // Game loop
+    function gameLoop(timestamp = 0) {
+      if (!gameRunning || gamePaused) return;
+      
+      // Calculate delta time
+      const deltaTime = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Update planet position to center
+      planet.x = canvas.width / 2;
+      planet.y = canvas.height / 2;
+      
+      // Draw background (simple starfield)
+      drawBackground();
+      
+      // Update and draw projectiles
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const projectile = projectiles[i];
+        const status = projectile.update();
+        
+        if (status === 'remove' || status === 'hit') {
+          projectiles.splice(i, 1);
+        } else {
+          projectile.draw();
+        }
+      }
+      
+      // Update and draw meteors
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const meteor = meteors[i];
+        const status = meteor.update(deltaTime);
+        
+        if (status === 'remove') {
+          meteors.splice(i, 1);
+        } else if (status === 'hit_planet') {
+          updateHealth(-meteor.damage);
+          createExplosion(meteor.x, meteor.y, meteor.radius * 1.5);
+          meteors.splice(i, 1);
+        } else {
+          meteor.draw();
+        }
+      }
+      
+      // Update and draw explosions
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        const explosion = explosions[i];
+        const status = explosion.update();
+        
+        if (status === 'remove') {
+          explosions.splice(i, 1);
+        } else {
+          explosion.draw();
+        }
+      }
+      
+      // Draw planet and cannon
+      planet.draw();
+      cannon.draw();
+      
+      // Spawn meteors
+      meteorSpawnTimer += deltaTime;
+      if (meteorSpawnTimer >= meteorSpawnRate) {
+        spawnMeteor();
+        meteorSpawnTimer = 0;
+        
+        // Increase difficulty over time
+        difficulty += 0.01;
+        meteorSpawnRate = Math.max(500, meteorSpawnRate - 10);
+      }
+      
+      // Request next frame
+      animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    function drawBackground() {
+      // Draw a simple starfield background
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw stars
+      const time = Date.now() * 0.001;
+      for (let i = 0; i < 100; i++) {
+        const x = Math.sin(i * 5.67 + time * 0.1) * canvas.width/2 + canvas.width/2;
+        const y = Math.cos(i * 3.14 + time * 0.1) * canvas.height/2 + canvas.height/2;
+        
+        if (x > 0 && x < canvas.width && y > 0 && y < canvas.height) {
+          const size = (Math.sin(i + time) * 0.5 + 0.5) * 3 + 1;
+          const brightness = Math.sin(i * 0.7 + time * 2) * 0.5 + 0.5;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, size, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${brightness * 0.7})`;
+          ctx.fill();
+        }
+      }
+    }
+    
+    // Event listeners
+    const keys = {};
+    
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      
+      // Fire on space
+      if (e.code === 'Space' && gameRunning && !gamePaused) {
+        fireProjectile();
+      }
+      
+      // Pause on Escape
+      if (e.code === 'Escape' && gameRunning) {
+        togglePause();
+      }
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+    
+    // Handle rotation based on key presses
+    function handleInput() {
+      if (!gameRunning || gamePaused) return;
+      
+      if (keys['ArrowLeft'] || keys['KeyA']) {
+        cannon.rotate(-1);
+      }
+      if (keys['ArrowRight'] || keys['KeyD']) {
+        cannon.rotate(1);
+      }
+      
+      requestAnimationFrame(handleInput);
+    }
+    
+    // Button event listeners
+    pauseButton.addEventListener('click', togglePause);
+    restartButton.addEventListener('click', resetGame);
+    startButton.addEventListener('click', () => {
+      startScreen.style.display = 'none';
+      resetGame();
+    });
+    
+    // Start input handling
+    handleInput();
+  </script>
+</body>
+</html>

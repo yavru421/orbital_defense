@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbital Defense</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #0ff;
+        }
+        
+        .button-container {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .game-button {
+            font-size: 24px;
+            padding: 15px 30px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        
+        .game-button:hover {
+            background-color: #0088ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Orbital Defense</h1>
+    <div class="button-container">
+        <a href="game.html" class="game-button">Single Player</a>
+        <a href="multiplayer.html" class="game-button">Multiplayer</a>
+    </div>
+</body>
+</html>

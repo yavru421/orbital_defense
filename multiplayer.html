@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orbital Defense - Multiplayer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    canvas {
+      border: 1px solid #333;
+      background-color: #000;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border-radius: 5px;
+    }
+    
+    #health-bar {
+      width: 200px;
+      height: 20px;
+      background-color: #333;
+      margin-top: 5px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    #health-fill {
+      height: 100%;
+      width: 100%;
+      background-color: #0f0;
+      transition: width 0.3s;
+    }
+    
+    button {
+      background-color: #444;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      margin: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #555;
+    }
+    
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: red;
+      text-align: center;
+      display: none;
+    }
+    
+    #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: rgba(0, 0, 0, 0.8);
+    }
+    
+    #start-screen h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px #0ff;
+    }
+    
+    #start-screen button {
+      font-size: 24px;
+      padding: 15px 30px;
+      background-color: #0066cc;
+    }
+    
+    /* Multiplayer specific styles */
+    #multiplayer-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    
+    #game-code-display {
+      font-family: monospace;
+      font-size: 32px;
+      letter-spacing: 5px;
+      background-color: rgba(0, 40, 60, 0.6);
+      padding: 10px 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+      color: #0ff;
+    }
+    
+    .lobby-container {
+      background-color: rgba(0, 20, 40, 0.7);
+      padding: 20px;
+      border-radius: 10px;
+      width: 80%;
+      max-width: 500px;
+      margin-bottom: 20px;
+    }
+    
+    .tab-buttons {
+      display: flex;
+      margin-bottom: 15px;
+    }
+    
+    .tab-button {
+      flex: 1;
+      padding: 10px;
+      background-color: #333;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+    
+    .tab-button.active {
+      background-color: #0066cc;
+    }
+    
+    .tab-content {
+      display: none;
+      padding: 10px;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .player-list {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      max-height: 150px;
+      overflow-y: auto;
+      padding: 5px;
+    }
+    
+    .player-list li {
+      padding: 5px 10px;
+      margin: 2px 0;
+      background-color: rgba(0, 40, 60, 0.4);
+      border-radius: 3px;
+    }
+    
+    .player-list .host:after {
+      content: " (Host)";
+      color: gold;
+    }
+    
+    .player-list .you {
+      font-weight: bold;
+      color: #0f0;
+    }
+    
+    input[type="text"] {
+      padding: 8px;
+      background-color: rgba(0, 0, 0, 0.5);
+      border: 1px solid #0066cc;
+      color: white;
+      width: 100%;
+      margin-bottom: 10px;
+      border-radius: 3px;
+    }
+    
+    .error-message {
+      color: #f66;
+      font-size: 14px;
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+      <div>Score: <span id="score">0</span></div>
+      <div>Health: <span id="health-text">100</span></div>
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <button id="pause-button">Pause</button>
+    </div>
+    
+    <div id="game-over">
+      <div>Game Over!</div>
+      <div>Final Score: <span id="final-score">0</span></div>
+      <button id="restart-button">Play Again</button>
+      <button id="back-to-lobby-button">Back to Lobby</button>
+    </div>
+    
+    <div id="multiplayer-container">
+      <h1>Orbital Defense - Multiplayer</h1>
+      
+      <div class="lobby-container">
+        <div class="tab-buttons">
+          <button class="tab-button active" data-tab="host">Host Game</button>
+          <button class="tab-button" data-tab="join">Join Game</button>
+        </div>
+        
+        <div class="tab-content active" id="host-tab">
+          <h3>Host a New Game</h3>
+          <input type="text" id="host-name" placeholder="Enter your name" maxlength="15">
+          <button id="create-game-button">Create Game</button>
+          <div id="host-code-section" style="display: none;">
+            <p>Share this code with other players:</p>
+            <div id="game-code-display">XXXXXX</div>
+            <button id="copy-code-button">Copy Code</button>
+            <p>Players in lobby:</p>
+            <ul class="player-list" id="host-player-list">
+              <li class="you host">Waiting for players...</li>
+            </ul>
+            <button id="start-game-button">Start Game</button>
+          </div>
+          <div class="error-message" id="host-error"></div>
+        </div>
+        
+        <div class="tab-content" id="join-tab">
+          <h3>Join a Game</h3>
+          <input type="text" id="join-name" placeholder="Enter your name" maxlength="15">
+          <input type="text" id="game-code-input" placeholder="Enter game code" maxlength="6">
+          <button id="join-game-button">Join Game</button>
+          <div id="join-lobby-section" style="display: none;">
+            <p>Players in lobby:</p>
+            <ul class="player-list" id="join-player-list">
+              <li>Connecting...</li>
+            </ul>
+            <p>Waiting for host to start the game...</p>
+          </div>
+          <div class="error-message" id="join-error"></div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="start-screen" style="display: none;">
+      <h1>Orbital Defense</h1>
+      <p>Defend your planet from incoming meteors!</p>
+      <p>Use 'R' and 'T' to rotate and space to fire</p>
+      <button id="start-button">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+    // Game setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const pauseButton = document.getElementById('pause-button');
+    const restartButton = document.getElementById('restart-button');
+    const backToLobbyButton = document.getElementById('back-to-lobby-button');
+    const scoreElement = document.getElementById('score');
+    const healthText = document.getElementById('health-text');
+    const healthFill = document.getElementById('health-fill');
+    const gameOverElement = document.getElementById('game-over');
+    const finalScoreElement = document.getElementById('final-score');
+    const multiplayerContainer = document.getElementById('multiplayer-container');
+    
+    // Multiplayer UI elements
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const hostNameInput = document.getElementById('host-name');
+    const joinNameInput = document.getElementById('join-name');
+    const gameCodeInput = document.getElementById('game-code-input');
+    const createGameButton = document.getElementById('create-game-button');
+    const joinGameButton = document.getElementById('join-game-button');
+    const startGameButton = document.getElementById('start-game-button');
+    const copyCodeButton = document.getElementById('copy-code-button');
+    const gameCodeDisplay = document.getElementById('game-code-display');
+    const hostCodeSection = document.getElementById('host-code-section');
+    const joinLobbySection = document.getElementById('join-lobby-section');
+    const hostPlayerList = document.getElementById('host-player-list');
+    const joinPlayerList = document.getElementById('join-player-list');
+    const hostError = document.getElementById('host-error');
+    const joinError = document.getElementById('join-error');
+    
+    // Initialize player name from localStorage if available
+    if (localStorage.getItem('playerName')) {
+      const savedName = localStorage.getItem('playerName');
+      hostNameInput.value = savedName;
+      joinNameInput.value = savedName;
+    }
+    
+    // Set canvas dimensions
+    function resizeCanvas() {
+      const containerWidth = window.innerWidth;
+      const containerHeight = window.innerHeight;
+      const size = Math.min(containerWidth, containerHeight) * 0.9;
+      
+      canvas.width = size;
+      canvas.height = size;
+    }
+    
+    // Asset loading system
+    const assets = {
+      planet: new Image(),
+      cannon: new Image(),
+      background: new Image(),
+      loaded: false,
+      loadPromises: []
+    };
+
+    function loadAssets() {
+      console.log('Starting asset loading...');
+      const baseUrl = location.hostname === 'localhost' ? '' : '/orbital-defense';
+      const imagesToLoad = [
+        { key: 'planet', src: `${baseUrl}/images/planet.png` },
+        { key: 'cannon', src: `${baseUrl}/images/cannon.png` }
+      ];
+
+      assets.loadPromises = imagesToLoad.map(img => new Promise((resolve, reject) => {
+        console.log(`Loading ${img.src}...`);
+        assets[img.key].onload = () => {
+          console.log(`Successfully loaded ${img.src}`);
+          console.log('Image dimensions:', assets[img.key].width, 'x', assets[img.key].height);
+          resolve();
+        };
+        assets[img.key].onerror = (e) => {
+          console.error(`Failed to load ${img.src}`, e);
+          resolve(); // Still resolve to continue game
+        };
+        assets[img.key].src = img.src;
+      }));
+
+      return Promise.all(assets.loadPromises).then(() => {
+        assets.loaded = true;
+        console.log('All assets loaded:', assets);
+      });
+    }
+
+    // Load assets before starting
+    loadAssets().then(() => {
+      resizeCanvas();
+    }).catch(error => {
+      console.error('Asset loading error:', error);
+    });
+    
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Multiplayer state
+    let isHost = false;
+    let gameCode = '';
+    let playerName = '';
+    let connectedPlayers = [];
+    let playerId = 'player-' + Math.random().toString(36).substr(2, 9);
+    
+    // Game state
+    let gameRunning = false;
+    let gamePaused = false;
+    let score = 0;
+    let health = 100;
+    let animationId;
+    
+    // Tab switching functionality
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        // Remove active class from all buttons and tabs
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        tabContents.forEach(content => content.classList.remove('active'));
+        
+        // Add active class to clicked button and corresponding tab
+        button.classList.add('active');
+        const tabId = button.getAttribute('data-tab') + '-tab';
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+    
+    // Generate random game code
+    function generateGameCode() {
+      const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitting confusing characters
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+      return code;
+    }
+    
+    // Host a new game
+    createGameButton.addEventListener('click', () => {
+      playerName = hostNameInput.value.trim();
+      
+      if (!playerName) {
+        hostError.textContent = 'Please enter your name';
+        return;
+      }
+      
+      // Save player name to localStorage
+      localStorage.setItem('playerName', playerName);
+      
+      // Generate game code and show host view
+      gameCode = generateGameCode();
+      gameCodeDisplay.textContent = gameCode;
+      hostCodeSection.style.display = 'block';
+      createGameButton.disabled = true;
+      hostNameInput.disabled = true;
+      hostError.textContent = '';
+      
+      // Add host to player list
+      isHost = true;
+      connectedPlayers = [{
+        id: playerId,
+        name: playerName,
+        isHost: true
+      }];
+      
+      updatePlayerList();
+      
+      // Simulate players joining (for demo purposes)
+      simulatePlayersJoining();
+    });
+    
+    // Join an existing game
+    joinGameButton.addEventListener('click', () => {
+      playerName = joinNameInput.value.trim();
+      const code = gameCodeInput.value.trim().toUpperCase();
+      
+      if (!playerName) {
+        joinError.textContent = 'Please enter your name';
+        return;
+      }
+      
+      if (!code || code.length !== 6) {
+        joinError.textContent = 'Please enter a valid 6-character game code';
+        return;
+      }
+      
+      // Save player name to localStorage
+      localStorage.setItem('playerName', playerName);
+      
+      // Simulate joining a game
+      joinError.textContent = '';
+      gameCode = code;
+      joinGameButton.disabled = true;
+      joinNameInput.disabled = true;
+      gameCodeInput.disabled = true;
+      
+      // Show joining message
+      joinError.textContent = 'Connecting to game...';
+      
+      // Simulate connection delay
+      setTimeout(() => {
+        joinError.textContent = '';
+        joinLobbySection.style.display = 'block';
+        
+        // Add self and simulated host to player list
+        isHost = false;
+        const hostId = 'host-' + Math.random().toString(36).substr(2, 9);
+        connectedPlayers = [
+          {
+            id: hostId,
+            name: 'Game Host',
+            isHost: true
+          },
+          {
+            id: playerId,
+            name: playerName,
+            isHost: false
+          }
+        ];
+        
+        updatePlayerList();
+        
+        // Simulate other players and game start
+        simulateMultiplayerGame();
+      }, 1500);
+    });
+    
+    // Start the game (host only)
+    startGameButton.addEventListener('click', () => {
+      if (connectedPlayers.length < 1) {
+        hostError.textContent = 'Need at least one player to start';
+        return;
+      }
+      
+      startMultiplayerGame();
+    });
+    
+    // Copy game code to clipboard
+    copyCodeButton.addEventListener('click', () => {
+      navigator.clipboard.writeText(gameCode).then(() => {
+        copyCodeButton.textContent = 'Copied!';
+        setTimeout(() => {
+          copyCodeButton.textContent = 'Copy Code';
+        }, 2000);
+      });
+    });
+    
+    // Back to lobby from game over screen
+    backToLobbyButton.addEventListener('click', () => {
+      showMultiplayerLobby();
+    });
+    
+    // Update player list UI
+    function updatePlayerList() {
+      const listElement = isHost ? hostPlayerList : joinPlayerList;
+      listElement.innerHTML = '';
+      
+      connectedPlayers.forEach(player => {
+        const playerItem = document.createElement('li');
+        
+        if (player.id === playerId) {
+          playerItem.classList.add('you');
+        }
+        
+        if (player.isHost) {
+          playerItem.classList.add('host');
+        }
+        
+        playerItem.textContent = player.id === playerId ? 
+          `${player.name} (You)` : player.name;
+        
+        listElement.appendChild(playerItem);
+      });
+    }
+    
+    // Simulate other players joining (for host view)
+    function simulatePlayersJoining() {
+      if (!isHost) return;
+      
+      // Add 1-3 simulated players over time
+      const playerCount = Math.floor(Math.random() * 3) + 1;
+      const playerNames = ['Cosmic', 'Nebula', 'Orion', 'Phoenix', 'Stella', 'Nova'];
+      
+      let addedCount = 0;
+      
+      function addPlayer() {
+        if (addedCount >= playerCount) return;
+        
+        const randomName = playerNames[Math.floor(Math.random() * playerNames.length)];
+        const randomId = 'simulated-' + Math.random().toString(36).substr(2, 9);
+        
+        connectedPlayers.push({
+          id: randomId,
+          name: randomName,
+          isHost: false
+        });
+        
+        updatePlayerList();
+        addedCount++;
+        
+        if (addedCount < playerCount) {
+          setTimeout(addPlayer, Math.random() * 2000 + 1000);
+        }
+      }
+      
+      // Start adding players after a delay
+      setTimeout(addPlayer, Math.random() * 2000 + 1000);
+    }
+    
+    // Simulate joining and starting a multiplayer game (for guest view)
+    function simulateMultiplayerGame() {
+      if (isHost) return;
+      
+      // Simulate additional players joining
+      setTimeout(() => {
+        connectedPlayers.push({
+          id: 'simulated-' + Math.random().toString(36).substr(2, 9),
+          name: 'Cosmic',
+          isHost: false
+        });
+        updatePlayerList();
+        
+        // Simulate host starting game
+        setTimeout(() => {
+          joinError.textContent = 'Host is starting the game...';
+          
+          setTimeout(() => {
+            startMultiplayerGame();
+          }, 1500);
+        }, 3000);
+      }, 2000);
+    }
+    
+    // Start the multiplayer game
+    function startMultiplayerGame() {
+      multiplayerContainer.style.display = 'none';
+      resetGame();
+    }
+    
+    // Show multiplayer lobby
+    function showMultiplayerLobby() {
+      gameOverElement.style.display = 'none';
+      multiplayerContainer.style.display = 'flex';
+      
+      // Reset state for new game
+      if (isHost) {
+        hostCodeSection.style.display = 'none';
+        createGameButton.disabled = false;
+        hostNameInput.disabled = false;
+      } else {
+        joinLobbySection.style.display = 'none';
+        joinGameButton.disabled = false;
+        joinNameInput.disabled = false;
+        gameCodeInput.disabled = false;
+        gameCodeInput.value = '';
+      }
+      
+      cancelAnimationFrame(animationId);
+      gameRunning = false;
+    }
+    
+    // Common game functions
+    function resetGame() {
+      // Reset game state
+      score = 0;
+      health = 100;
+      
+      // Update UI
+      scoreElement.textContent = score;
+      healthText.textContent = health;
+      healthFill.style.width = '100%';
+      
+      // Start the game
+      gameRunning = true;
+      gamePaused = false;
+      
+      // Initialize game objects (planet, cannon, etc.)
+      initializeGameObjects();
+      
+      // Start game loop
+      gameLoop();
+    }
+    
+    function initializeGameObjects() {
+      // Initialize planet at center of canvas
+      planet = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: 30,
+        draw: function() {
+          if (assets.loaded && assets.planet.complete) {
+            // Draw image if loaded
+            console.log('Drawing planet image');
+            ctx.save();
+            ctx.translate(this.x - this.radius, this.y - this.radius);
+            ctx.drawImage(assets.planet, 0, 0, this.radius * 2, this.radius * 2);
+            ctx.restore();
+          } else {
+            console.log('Using fallback planet graphics');
+            // Fallback to original circle drawing
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#29f';
+            ctx.fill();
+            
+            const gradient = ctx.createRadialGradient(
+              this.x, this.y, this.radius, 
+              this.x, this.y, this.radius * 1.2
+            );
+            gradient.addColorStop(0, 'rgba(41, 128, 255, 0.5)');
+            gradient.addColorStop(1, 'rgba(41, 128, 255, 0)');
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+          }
+        }
+      };
+      
+      // Initialize cannon
+      cannon = {
+        angle: 0,
+        length: 40,
+        width: 10,
+        rotationSpeed: 0.1,
+        draw: function() {
+          ctx.save();
+          ctx.translate(planet.x, planet.y);
+          ctx.rotate(this.angle);
+          
+          if (assets.loaded && assets.cannon.complete) {
+            // Draw image if loaded
+            ctx.drawImage(assets.cannon, 0, -this.width/2, this.length, this.width);
+          } else {
+            // Fallback to original rectangle drawing
+            ctx.beginPath();
+            ctx.rect(0, -this.width/2, this.length, this.width);
+            ctx.fillStyle = '#777';
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(this.length, 0, this.width/2, 0, Math.PI * 2);
+            ctx.fillStyle = '#999';
+            ctx.fill();
+          }
+          
+          ctx.restore();
+        }
+      };
+    }
+    
+    function gameLoop() {
+      if (!gameRunning) return;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw background
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw simple stars
+      for (let i = 0; i < 100; i++) {
+        ctx.beginPath();
+        ctx.arc(
+          Math.random() * canvas.width,
+          Math.random() * canvas.height,
+          Math.random() * 2 + 0.5,
+          0, Math.PI * 2
+        );
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.7 + 0.3})`;
+        ctx.fill();
+      }
+      
+      // Draw planet and cannon
+      planet.draw();
+      cannon.draw();
+      
+      // Handle key input
+      if (keys['KeyR']) {
+        cannon.angle -= cannon.rotationSpeed;
+      }
+      if (keys['KeyT']) {
+        cannon.angle += cannon.rotationSpeed;
+      }
+      
+      // Request next frame
+      animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    // Handle keyboard input
+    const keys = {};
+    
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+    
+    // Initialize game
+    let planet, cannon;
+  </script>
+</body>
+</html>
